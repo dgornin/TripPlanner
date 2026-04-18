@@ -113,11 +113,19 @@ export default function MapView({ days, accommodation }: Props) {
   // The map container often resolves its height AFTER MapLibre constructs
   // its canvas (because of the flex-row parent). Force a resize once we
   // know both the map and its parent have laid out, otherwise the initial
-  // frame is a blank WebGL context.
+  // frame is a blank WebGL context. Also fire a couple of explicit repaints
+  // after mount — without them some browsers happily skip the first frame.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     map.resize();
+    map.triggerRepaint();
+    const t1 = window.setTimeout(() => map.triggerRepaint(), 120);
+    const t2 = window.setTimeout(() => map.triggerRepaint(), 400);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [mapReady]);
 
   // One GeoJSON FeatureCollection with one LineString per visible day.
