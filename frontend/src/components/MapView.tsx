@@ -166,6 +166,11 @@ export default function MapView({ days, accommodation }: Props) {
       attributionControl={{ compact: true }}
       onLoad={() => setMapReady(true)}
       onClick={() => setOpenPopupId(null)}
+      // preserveDrawingBuffer: keep the WebGL buffer after each frame so the
+      // initial paint survives compositor timing quirks (without it, some
+      // browsers show a black canvas until the user interacts). react-map-gl
+      // does not type this option but it passes through to maplibre-gl.
+      {...({ preserveDrawingBuffer: true } as Record<string, unknown>)}
     >
       {routesGeoJson.features.length > 0 && (
         <Source id="tb-routes" type="geojson" data={routesGeoJson}>
