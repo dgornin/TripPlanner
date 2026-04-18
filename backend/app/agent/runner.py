@@ -223,7 +223,7 @@ async def run_agent(
             elif kind == "on_chain_end" and event.get("name") in {"LangGraph", "agent"}:
                 final_state = data.get("output") or data.get("outputs")
     except Exception as exc:  # noqa: BLE001
-        yield {"type": "error", "error": str(exc)}
+        yield {"type": "error", "error": _humanize_agent_error(exc)}
         return
     finally:
         reset_agent_context(tokens)
@@ -246,6 +246,26 @@ async def run_agent(
     async with _Fresh() as fresh:
         yield {"type": "state", "trip": await snapshot_trip(fresh, trip.id)}
     yield {"type": "done"}
+
+
+def _humanize_agent_error(exc: Exception) -> str:
+    """Surface a human-readable Russian message for common agent errors."""
+    msg = str(exc)
+    if "403" in msg and ("forbidden" in msg.lower() or "not allowed" in msg.lower()):
+        return (
+            "Запрос к ИИ-провайдеру отклонён (403). Скорее всего сервер "
+            "находится в регионе, заблокированном Anthropic. Настройте "
+            "исходящий прокси или ANTHROPIC_API_URL на разрешённый шлюз "
+            "и перезапустите backend."
+        )
+    if "connection" in msg.lower() and "anthropic" in msg.lower():
+        return (
+            "Не удалось достучаться до Anthropic API. Проверьте сеть сервера "
+            "или настройте прокси через HTTPS_PROXY."
+        )
+    if "401" in msg and "anthropic" in msg.lower():
+        return "ANTHROPIC_API_KEY невалиден — проверьте ключ в .env."
+    return msg
 
 
 def _safe_tool_output(output) -> object:

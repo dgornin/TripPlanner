@@ -69,6 +69,19 @@ export default function ChatPanel({ tripId, onState, autoStart }: Props) {
           streamBufRef.current = "";
         } else if (ev.event === "state") {
           if (ev.data?.trip) onState(ev.data.trip as Trip);
+        } else if (ev.event === "error") {
+          const errText = (ev.data?.error as string) ?? "Неизвестная ошибка.";
+          setLog((l) => {
+            const copy = [...l];
+            // Replace the last assistant bubble with the error
+            for (let i = copy.length - 1; i >= 0; i--) {
+              if (copy[i].role === "assistant") {
+                copy[i] = { role: "assistant", text: `⚠️ ${errText}` };
+                return copy;
+              }
+            }
+            return [...copy, { role: "assistant", text: `⚠️ ${errText}` }];
+          });
         }
       }
     } catch (err) {
@@ -76,7 +89,7 @@ export default function ChatPanel({ tripId, onState, autoStart }: Props) {
         ...l,
         {
           role: "assistant",
-          text: "Произошла ошибка. Попробуйте ещё раз.",
+          text: "⚠️ Произошла ошибка соединения. Попробуйте ещё раз.",
         },
       ]);
     } finally {
