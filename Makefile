@@ -20,8 +20,10 @@ help:
 	@echo "  lint            ruff + eslint"
 	@echo "  fmt             ruff format + prettier"
 
+PYTHON ?= $(shell command -v python3.11 >/dev/null 2>&1 && echo python3.11 || echo python3)
+
 install:
-	cd backend && python3 -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -e ".[dev]"
+	cd backend && $(PYTHON) -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -e ".[dev]"
 	cd frontend && npm install
 
 up:
