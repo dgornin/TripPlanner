@@ -136,6 +136,68 @@ async def add_place(
 
 
 @tool
+async def plan_place(
+    day_number: int,
+    query: str,
+    near_city: str,
+    description: str | None = None,
+    duration_minutes: int | None = None,
+    category: str | None = None,
+) -> dict:
+    """Preferred one-shot tool: geocode `query` near `near_city` AND add the
+    top result to `day_number` in a single call. Use this INSTEAD of calling
+    `search_place` then `add_place` — it halves LLM round-trips.
+
+    Returns {place_id, name, lat, lon, address} on success or {error: "..."}
+    if nothing matched. Fall back to `search_place` only when you need to
+    disambiguate between multiple candidates.
+    """
+    tid = _trip_id()
+    candidates = await geocoding.search_places(query, near_city=near_city, limit=3)
+    if not candidates:
+        return {"error": f"not found: {query}"}
+    best = candidates[0]
+    name = best.get("name") or query
+    try:
+        lat = float(best["lat"])
+        lon = float(best["lon"])
+    except (KeyError, ValueError, TypeError):
+        return {"error": "candidate missing coords"}
+    address = best.get("address")
+
+    lock = await _lock_for(tid)
+    async with lock:
+        async with _SessionMaker() as db:
+            day = await _find_or_create_day(db, tid, int(day_number))
+            max_order = (
+                await db.execute(
+                    select(func.max(Place.order_index)).where(Place.day_id == day.id)
+                )
+            ).scalar()
+            order_index = (max_order + 1) if max_order is not None else 0
+            place = Place(
+                day_id=day.id,
+                order_index=order_index,
+                name=name,
+                description=description,
+                lat=lat,
+                lon=lon,
+                duration_minutes=duration_minutes,
+                category=category,
+                address=address,
+            )
+            db.add(place)
+            await db.commit()
+            return {
+                "place_id": str(place.id),
+                "name": name,
+                "lat": lat,
+                "lon": lon,
+                "address": address,
+            }
+
+
+@tool
 async def remove_place(place_id: str) -> dict:
     """Remove a place from the trip by id."""
     try:
@@ -206,7 +268,8 @@ async def set_day_title(day_number: int, title: str) -> dict:
 
 TOOLS: list[Any] = [
     kb_search,
-    search_place,
+    plan_place,  # preferred: geocode + insert in one shot
+    search_place,  # fallback when the agent needs to pick between candidates
     add_place,
     remove_place,
     update_place,

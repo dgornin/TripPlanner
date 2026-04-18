@@ -204,6 +204,7 @@ async def run_agent(
                 # the UI updates live as places are added.
                 if tool_name in {
                     "add_place",
+                    "plan_place",
                     "remove_place",
                     "update_place",
                     "set_trip_summary",

@@ -25,7 +25,9 @@ const sizeClasses: Record<Size, string> = {
 };
 
 export function buttonClasses(variant: Variant = "primary", size: Size = "md", extra = "") {
-  return `inline-flex items-center justify-center gap-2 font-medium rounded-full transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 disabled:opacity-50 disabled:cursor-not-allowed ${variantClasses[variant]} ${sizeClasses[size]} ${extra}`;
+  // touch-manipulation disables iOS Safari's double-tap-to-zoom / panning
+  // micro-delays that were re-routing Submit taps onto neighbouring inputs.
+  return `inline-flex items-center justify-center gap-2 font-medium rounded-full transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation ${variantClasses[variant]} ${sizeClasses[size]} ${extra}`;
 }
 
 export const Button = forwardRef<HTMLButtonElement, Props>(function Button(

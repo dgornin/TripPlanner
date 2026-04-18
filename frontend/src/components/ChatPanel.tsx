@@ -22,15 +22,30 @@ interface Props {
   /** If provided (and the trip is empty), ChatPanel fires this prompt once
    *  on mount to kick off the agent automatically. */
   autoStart?: string | null;
+  /** Called whenever the agent starts / stops working, so the parent can
+   *  mirror a loading state elsewhere in the UI (e.g. the itinerary panel). */
+  onBusyChange?: (busy: boolean) => void;
 }
 
-export default function ChatPanel({ tripId, onState, autoStart }: Props) {
+export default function ChatPanel({
+  tripId,
+  onState,
+  autoStart,
+  onBusyChange,
+}: Props) {
   const qc = useQueryClient();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<LogItem[]>([]);
   const streamBufRef = useRef("");
   const autoStartedRef = useRef(false);
+
+  // Mirror busy state upwards so the parent page can show a synchronized
+  // "agent is thinking" indicator in other panels (itinerary, mobile tab
+  // switcher, etc.).
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
 
   const send = async (msg: string) => {
     const clean = msg.trim();
@@ -181,6 +196,7 @@ function toolLabel(name: string): string {
   const map: Record<string, string> = {
     kb_search: "ищу факты в базе",
     search_place: "ищу место на карте",
+    plan_place: "добавляю точку в маршрут",
     add_place: "добавляю точку",
     remove_place: "убираю точку",
     update_place: "правлю точку",

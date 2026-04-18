@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -20,6 +20,10 @@ interface Props {
   MapSlot: ReactNode;
   ItinerarySlot: ReactNode;
   ChatSlot: ReactNode;
+  /** When the parent knows the agent is generating (e.g. auto-start fired on
+   *  a fresh trip), we jump the mobile user to the "План" tab so they can
+   *  watch the loading state — otherwise they stare at an empty map. */
+  agentBusy?: boolean;
 }
 
 type MobileTab = "map" | "itinerary" | "chat";
@@ -33,8 +37,24 @@ export default function TripPage({
   MapSlot,
   ItinerarySlot,
   ChatSlot,
+  agentBusy,
 }: Props) {
   const [tab, setTab] = useState<MobileTab>("map");
+  const userSwitchedRef = useRef(false);
+
+  // First time the agent starts generating, pull the mobile user onto the
+  // "План" tab so they see the loading banner. After that, respect any
+  // manual tab switches.
+  useEffect(() => {
+    if (!agentBusy) return;
+    if (userSwitchedRef.current) return;
+    setTab("itinerary");
+  }, [agentBusy]);
+
+  const handleTab = (next: MobileTab) => {
+    userSwitchedRef.current = true;
+    setTab(next);
+  };
 
   return (
     // Fill the viewport below AppLayout's sticky header (h ≈ 60px) exactly,
@@ -144,19 +164,20 @@ export default function TripPage({
         <nav className="border-t border-ink-200 bg-white grid grid-cols-3 text-sm">
           <MobileTabButton
             active={tab === "map"}
-            onClick={() => setTab("map")}
+            onClick={() => handleTab("map")}
             Icon={MapIcon}
             label="Карта"
           />
           <MobileTabButton
             active={tab === "itinerary"}
-            onClick={() => setTab("itinerary")}
+            onClick={() => handleTab("itinerary")}
             Icon={ListChecks}
             label="План"
+            badge={agentBusy}
           />
           <MobileTabButton
             active={tab === "chat"}
-            onClick={() => setTab("chat")}
+            onClick={() => handleTab("chat")}
             Icon={MessageSquare}
             label="Чат"
           />
@@ -171,20 +192,27 @@ function MobileTabButton({
   onClick,
   Icon,
   label,
+  badge,
 }: {
   active: boolean;
   onClick: () => void;
   Icon: any;
   label: string;
+  badge?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center justify-center gap-0.5 py-3 transition-colors ${
+      className={`relative flex flex-col items-center justify-center gap-0.5 py-3 transition-colors ${
         active ? "text-brand-600" : "text-ink-500"
       }`}
     >
-      <Icon size={18} strokeWidth={active ? 2.25 : 1.75} />
+      <span className="relative">
+        <Icon size={18} strokeWidth={active ? 2.25 : 1.75} />
+        {badge && (
+          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-brand-500 animate-pulse" />
+        )}
+      </span>
       <span className="text-[11px]">{label}</span>
     </button>
   );

@@ -45,6 +45,7 @@ services:
       SEED_RAG_ON_STARTUP: ${SEED_RAG_ON_STARTUP:-true}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_PROXY_URL: ${TELEGRAM_PROXY_URL:-}
       # Outbound proxy for Anthropic (needed in regions where api.anthropic.com
       # is geo-blocked). httpx honours these standard env vars directly.
       HTTP_PROXY: ${HTTP_PROXY:-}
@@ -66,6 +67,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required to run the bot service}
+      TELEGRAM_PROXY_URL: ${TELEGRAM_PROXY_URL:-}
       JWT_SECRET: ${JWT_SECRET}
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     SEED_RAG_ON_STARTUP: bool = True
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_BOT_USERNAME: str = "travel_buddy_ru_bot"
+    # Optional proxy for Telegram API calls — needed in regions that throttle
+    # api.telegram.org. Leave empty to hit Telegram directly. Accepts any
+    # scheme httpx supports (http://, https://, socks5://).
+    TELEGRAM_PROXY_URL: str = ""
     NOMINATIM_USER_AGENT: str = "travel-buddy-ru/0.1 (dgornin@gmail.com)"
 
     # Disable TLS cert verification for outgoing Anthropic calls.
