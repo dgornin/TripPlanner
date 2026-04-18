@@ -32,6 +32,11 @@ services:
     build:
       context: ./backend
     command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    volumes:
+      # Persist the 460 MB multilingual MiniLM model across image rebuilds.
+      # Without this the first kb_search after every rebuild downloads the
+      # model through the outbound proxy and can time out the SSE stream.
+      - hfcache:/root/.cache/huggingface
     environment:
       # Compose reassembles DATABASE_URL from the service-internal hostname.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -90,3 +95,4 @@ services:
 
 volumes:
   pgdata: {}
+  hfcache: {}

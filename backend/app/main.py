@@ -29,6 +29,19 @@ async def lifespan(app: FastAPI):
                 print(f"[lifespan] Seeded {n} KB chunks")
         except Exception as exc:  # noqa: BLE001
             print(f"[lifespan] RAG seed skipped: {exc}")
+
+    # Warm up the multilingual MiniLM model so the first user request
+    # doesn't pay the ~460 MB download cost through our outbound proxy.
+    # Cheap when the volume cache is populated (just loads weights into RAM).
+    try:
+        import asyncio
+
+        from app.rag.embedder import embed
+
+        await asyncio.to_thread(embed, ["warmup"])
+        print("[lifespan] Embedder warm")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[lifespan] Embedder warm-up skipped: {exc}")
     yield
 
 
