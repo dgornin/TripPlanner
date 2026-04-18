@@ -53,8 +53,9 @@ services:
     restart: unless-stopped
 
   bot:
-    build:
-      context: ./backend
+    # Reuses the backend image: same code, different entrypoint. Saves
+    # ~3 GB of disk and ~200 MB of RAM on a small VM.
+    image: travelbuddy-backend:latest
     command: ["python", "-m", "app.bot.main"]
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
