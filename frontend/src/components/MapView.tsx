@@ -160,16 +160,18 @@ export default function MapView({ days, accommodation }: Props) {
   // --- Initialise the map once on mount. ---
   useEffect(() => {
     if (!containerRef.current) return;
+    // MapLibre v5 moved GL context flags under `canvasContextAttributes`.
+    // Turning on `preserveDrawingBuffer` means the WebGL frame survives
+    // between compositor samples — otherwise the very first paint was
+    // occasionally landing in a cleared buffer and users saw a black
+    // canvas until they panned.
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: DEFAULT_STYLE_URL,
       center: [37.62, 55.75],
       zoom: 4,
       attributionControl: { compact: true },
-      // `preserveDrawingBuffer` keeps the WebGL buffer around so the first
-      // compositor sample isn't a black frame. Cast via `as any` because
-      // the option is valid at runtime but not in the v5 TS `MapOptions`.
-      ...({ preserveDrawingBuffer: true } as Record<string, unknown>),
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     mapRef.current = map;
 
@@ -182,7 +184,17 @@ export default function MapView({ days, accommodation }: Props) {
       map.triggerRepaint();
     });
 
+    // In rare cases the compositor samples the canvas BEFORE the first
+    // render settles. Fire extra repaints for the first 1.5 s — cheap,
+    // imperceptible, and kills the "blank until you pan" edge case.
+    const t1 = window.setTimeout(() => map.triggerRepaint(), 150);
+    const t2 = window.setTimeout(() => map.triggerRepaint(), 500);
+    const t3 = window.setTimeout(() => map.triggerRepaint(), 1500);
+
     return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
       map.remove();
       mapRef.current = null;
       setStyleLoaded(false);
