@@ -1,10 +1,15 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Send, Sparkles } from "lucide-react";
 import VoiceButton from "./VoiceButton";
 import { streamPostSse } from "../lib/sse";
 import { track } from "../lib/analytics";
 import type { Trip } from "../api/trips";
+
+// Module-level set of trip ids for which we've already fired the autoStart
+// prompt. Module scope survives React StrictMode's double-mount, so the
+// second effect run is a no-op.
+const AUTO_STARTED = new Set<string>();
 
 type LogItem =
   | { role: "user"; text: string }
@@ -14,14 +19,18 @@ type LogItem =
 interface Props {
   tripId: string;
   onState: (trip: Trip) => void;
+  /** If provided (and the trip is empty), ChatPanel fires this prompt once
+   *  on mount to kick off the agent automatically. */
+  autoStart?: string | null;
 }
 
-export default function ChatPanel({ tripId, onState }: Props) {
+export default function ChatPanel({ tripId, onState, autoStart }: Props) {
   const qc = useQueryClient();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<LogItem[]>([]);
   const streamBufRef = useRef("");
+  const autoStartedRef = useRef(false);
 
   const send = async (msg: string) => {
     const clean = msg.trim();
@@ -78,6 +87,17 @@ export default function ChatPanel({ tripId, onState }: Props) {
       qc.invalidateQueries({ queryKey: ["trip", tripId] });
     }
   };
+
+  // Kick off the agent automatically on an empty trip (after initial creation).
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (!autoStart) return;
+    if (AUTO_STARTED.has(tripId)) return;
+    AUTO_STARTED.add(tripId);
+    autoStartedRef.current = true;
+    send(autoStart);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, tripId]);
 
   return (
     <div className="rounded-3xl bg-white/90 backdrop-blur-xl border border-white/60 shadow-glass">

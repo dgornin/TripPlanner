@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getTrip, patchTrip, type Trip } from "../api/trips";
@@ -30,6 +30,13 @@ export default function TripDetailPage() {
   useEffect(() => {
     setSelectedDay(null);
   }, [id, setSelectedDay]);
+
+  // Auto-kick the agent the first time a freshly created trip is opened.
+  // useMemo must run on every render (hook ordering), so compute up-front.
+  const autoStart = useMemo(
+    () => (trip ? buildAutoStart(trip) : null),
+    [trip?.id, trip?.days.length, trip?.summary, trip?.accommodation],
+  );
 
   if (isLoading || !trip) {
     return (
@@ -79,7 +86,57 @@ export default function TripDetailPage() {
         />
       }
       ItinerarySlot={<Itinerary trip={trip} />}
-      ChatSlot={<ChatPanel tripId={trip.id} onState={onState} />}
+      ChatSlot={
+        <ChatPanel tripId={trip.id} onState={onState} autoStart={autoStart} />
+      }
     />
   );
+}
+
+const INTEREST_LABEL: Record<string, string> = {
+  culture: "культура",
+  food: "еда",
+  nature: "природа",
+  active: "активный отдых",
+  nightlife: "ночная жизнь",
+  family: "с семьёй",
+};
+
+function buildAutoStart(trip: Trip): string | null {
+  const hasPlaces = trip.days.some((d) => d.places.length > 0);
+  if (hasPlaces) return null;
+  if (trip.summary) return null; // agent already wrote a summary
+  const parts: string[] = [];
+  const numDays = trip.days.length;
+  if (numDays > 0) {
+    parts.push(`Составь план на ${numDays} ${dayNoun(numDays)} в ${trip.destination}.`);
+  } else {
+    parts.push(`Составь план в ${trip.destination}.`);
+  }
+  if ((trip.interests || []).length > 0) {
+    const labels = trip.interests
+      .map((i) => INTEREST_LABEL[i] || i)
+      .join(", ");
+    parts.push(`Интересы: ${labels}.`);
+  }
+  if (trip.travelers && trip.travelers > 1) {
+    parts.push(`Путников: ${trip.travelers}.`);
+  }
+  if (trip.accommodation) {
+    parts.push(
+      `Место проживания: ${trip.accommodation}. Строй дневные маршруты от него.`,
+    );
+  }
+  parts.push(
+    "Обязательно добавь минимум 3-4 точки в каждый день через add_place и напиши summary.",
+  );
+  return parts.join(" ");
+}
+
+function dayNoun(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "день";
+  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return "дня";
+  return "дней";
 }

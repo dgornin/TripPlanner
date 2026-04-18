@@ -29,7 +29,11 @@ from app.db.models import Message, Trip
 settings = get_settings()
 
 MODEL_NAME = "claude-haiku-4-5-20251001"
-RECURSION_LIMIT = 25  # ~ each agent step = one LLM call or tool call pair
+# Each agent step is one LLM call or one tool invocation. A typical
+# "make a plan" flow for a 3-day trip fires ~1 (kb_search) + 1 (summary) +
+# 3 (day titles) + 3×4×2 (search_place+add_place per place) ≈ 30 steps.
+# Doubling gives us headroom for retries / refinement.
+RECURSION_LIMIT = 60
 
 
 def build_llm() -> BaseChatModel:

@@ -37,7 +37,10 @@ export default function TripPage({
   const [tab, setTab] = useState<MobileTab>("map");
 
   return (
-    <div className="h-[100dvh] relative bg-ink-100 overflow-hidden">
+    // Fill the viewport below AppLayout's sticky header (h ≈ 60px) exactly,
+    // so the whole trip surface is non-scrolling and the top toolbar + bottom
+    // chat composer stay anchored together.
+    <div className="h-[calc(100dvh-61px)] relative bg-ink-100 overflow-hidden">
       <header className="absolute inset-x-0 top-0 z-30 bg-white/80 backdrop-blur border-b border-ink-200">
         <div className="flex items-center justify-between px-4 sm:px-6 py-3">
           <div className="flex items-center gap-4">

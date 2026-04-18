@@ -37,6 +37,7 @@ export default function PublicTripPage() {
 
   return (
     <div className="h-[100dvh] relative bg-ink-100 overflow-hidden">
+      {/* Public trip page isn't inside AppLayout, so it uses full viewport */}
       <header className="absolute inset-x-0 top-0 z-30 bg-white/80 backdrop-blur border-b border-ink-200">
         <div className="flex items-center justify-between px-4 sm:px-6 py-3">
           <Logo compact />

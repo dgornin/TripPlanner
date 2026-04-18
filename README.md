@@ -108,23 +108,36 @@ Open http://localhost:5173, sign up, describe a trip.
 
 ### Demo credentials
 
-Two accounts were created during end-to-end testing — safe to re-use locally:
+Pre-seeded accounts used during E2E testing:
 
 | Email | Password | Role |
 |---|---|---|
-| `chrome@local.ru` | `secret1` | admin (sees `/app/admin`) |
-| `demo@local.ru` | `secret1` | regular user |
+| **`admin@travelbuddy.ru`** | **`admin1234`** | **Admin** — sees `/app/admin` analytics dashboard |
+| `chrome@local.ru` | `secret1` | Admin (backup) |
+| `demo@local.ru` | `secret1` | Regular user |
 
-Passwords are stored as bcrypt hashes; re-run SQL to rotate them:
-
-```sql
--- Reset to 'secret1' (pre-computed bcrypt)
-UPDATE users
-SET password_hash = '$2b$12$rXqNd83xYwYkVhpzO3Iue.lJxWjyRxB5/Pd2Ov/O9YZDBr1rJR4/K'
-WHERE email IN ('chrome@local.ru', 'demo@local.ru');
-```
-
-> Or hit `POST /api/auth/signup` to create a fresh account — it's free and instant.
+> Easiest way to get a clean admin for a demo:
+> ```bash
+> make backend-dev-seed-admin   # (or re-run the one-liner below)
+> ```
+>
+> ```bash
+> cd backend && .venv/bin/python -c "
+> import asyncio; from sqlalchemy import select
+> from app.db.session import SessionLocal; from app.db.models import User
+> from app.core.security import hash_password
+> async def main():
+>   async with SessionLocal() as db:
+>     u = (await db.execute(select(User).where(User.email=='admin@travelbuddy.ru'))).scalar_one_or_none()
+>     if u:
+>       u.password_hash = hash_password('admin1234'); u.is_admin = True
+>     else:
+>       db.add(User(email='admin@travelbuddy.ru', password_hash=hash_password('admin1234'), is_admin=True, display_name='Admin'))
+>     await db.commit()
+> asyncio.run(main())"
+> ```
+>
+> Or just `POST /api/auth/signup` for a fresh regular account.
 
 ### Full-stack via compose (podman or docker)
 
