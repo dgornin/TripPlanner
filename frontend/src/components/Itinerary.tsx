@@ -1,4 +1,4 @@
-import { Clock, Home } from "lucide-react";
+import { Clock, Home, Sparkles } from "lucide-react";
 import type { Trip } from "../api/trips";
 import { useUi } from "../store/uiStore";
 
@@ -12,15 +12,46 @@ const dayColors = [
   "#db2777",
 ];
 
-export default function Itinerary({ trip }: { trip: Trip }) {
+interface Props {
+  trip: Trip;
+  /** True while the agent is mid-generation. Adds a loading banner so the
+   *  user can see progress instead of staring at "no places yet". */
+  agentBusy?: boolean;
+}
+
+export default function Itinerary({ trip, agentBusy }: Props) {
   const selected = useUi((s) => s.selectedDay);
   const days =
     selected == null
       ? trip.days
       : trip.days.filter((d) => d.day_number === selected);
+  const totalPlaces = trip.days.reduce((n, d) => n + d.places.length, 0);
+  const showGenerationBanner = agentBusy;
 
   return (
     <div className="space-y-5">
+      {showGenerationBanner && (
+        <div className="rounded-2xl border border-brand-200 bg-brand-50/70 px-3.5 py-3 flex items-start gap-3">
+          <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white shrink-0 animate-pulse">
+            <Sparkles size={16} />
+          </span>
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-ink-900 flex items-center gap-1">
+              Агент составляет маршрут
+              <span className="inline-flex gap-0.5 ml-1">
+                <span className="w-1 h-1 rounded-full bg-ink-900 animate-[pulse_1.2s_ease-in-out_infinite]" />
+                <span className="w-1 h-1 rounded-full bg-ink-900 animate-[pulse_1.2s_ease-in-out_.2s_infinite]" />
+                <span className="w-1 h-1 rounded-full bg-ink-900 animate-[pulse_1.2s_ease-in-out_.4s_infinite]" />
+              </span>
+            </div>
+            <div className="text-xs text-ink-600 mt-0.5 leading-snug">
+              {totalPlaces > 0
+                ? `Уже ${totalPlaces} ${placeNoun(totalPlaces)} — добавляю остальные.`
+                : "Ищу факты о городе и расставляю точки по дням."}
+            </div>
+          </div>
+        </div>
+      )}
       {trip.accommodation && (
         <div className="flex items-start gap-3 rounded-2xl bg-ink-900 text-white p-3.5">
           <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500/20 text-brand-300 shrink-0">
@@ -63,7 +94,9 @@ export default function Itinerary({ trip }: { trip: Trip }) {
           <ol className="space-y-2.5">
             {d.places.length === 0 && (
               <li className="text-xs text-ink-500 bg-ink-100 rounded-lg px-3 py-3">
-                Пока нет точек — попросите агента подобрать места.
+                {agentBusy
+                  ? "Агент ещё подбирает точки для этого дня…"
+                  : "Пока нет точек — попросите агента подобрать места."}
               </li>
             )}
             {d.places.map((p, i) => (
@@ -105,4 +138,13 @@ export default function Itinerary({ trip }: { trip: Trip }) {
       ))}
     </div>
   );
+}
+
+function placeNoun(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "точка";
+  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100))
+    return "точки";
+  return "точек";
 }

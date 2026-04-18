@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getTrip, patchTrip, type Trip } from "../api/trips";
@@ -21,6 +21,8 @@ export default function TripDetailPage() {
   const selectedDay = useUi((s) => s.selectedDay);
   const setSelectedDay = useUi((s) => s.setSelectedDay);
   const showToast = useUi((s) => s.showToast);
+  const [agentBusy, setAgentBusy] = useState(false);
+  const handleBusyChange = useCallback((b: boolean) => setAgentBusy(b), []);
 
   useEffect(() => {
     track("page_view", { path: "/app/trips/:id", trip_id: id });
@@ -75,6 +77,7 @@ export default function TripDetailPage() {
       selectedDay={selectedDay}
       onSelectDay={setSelectedDay}
       onShare={share}
+      agentBusy={agentBusy}
       MapSlot={
         <MapView
           days={trip.days}
@@ -85,9 +88,14 @@ export default function TripDetailPage() {
           }}
         />
       }
-      ItinerarySlot={<Itinerary trip={trip} />}
+      ItinerarySlot={<Itinerary trip={trip} agentBusy={agentBusy} />}
       ChatSlot={
-        <ChatPanel tripId={trip.id} onState={onState} autoStart={autoStart} />
+        <ChatPanel
+          tripId={trip.id}
+          onState={onState}
+          autoStart={autoStart}
+          onBusyChange={handleBusyChange}
+        />
       }
     />
   );

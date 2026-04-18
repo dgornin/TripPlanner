@@ -98,14 +98,44 @@ export default function NewTripForm() {
           <span className="text-sm font-medium text-ink-900">Путников</span>
           <span className="text-xs text-ink-500">от 1 до 10</span>
         </div>
-        <input
-          type="number"
-          value={travelers}
-          min={1}
-          max={10}
-          onChange={(e) => setTravelers(parseInt(e.target.value || "1", 10))}
-          className="w-full h-12 px-4 rounded-2xl border border-ink-200 bg-white text-ink-900 outline-none focus:border-ink-900 focus:ring-2 focus:ring-brand-500/30 transition"
-        />
+        {/* Stepper, not <input type="number">: iOS Safari's native steppers
+            were swallowing taps on the submit button below this field. */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Меньше путников"
+            onClick={() => setTravelers((v) => Math.max(1, v - 1))}
+            className="h-12 w-12 rounded-2xl border border-ink-200 bg-white text-ink-900 text-lg font-medium hover:border-ink-900 transition select-none touch-manipulation disabled:opacity-40"
+            disabled={travelers <= 1}
+          >
+            −
+          </button>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={travelers}
+            onChange={(e) => {
+              const raw = e.target.value.replace(/[^0-9]/g, "");
+              if (!raw) {
+                setTravelers(1);
+                return;
+              }
+              const n = Math.min(10, Math.max(1, parseInt(raw, 10)));
+              setTravelers(n);
+            }}
+            className="flex-1 h-12 px-4 text-center rounded-2xl border border-ink-200 bg-white text-ink-900 outline-none focus:border-ink-900 focus:ring-2 focus:ring-brand-500/30 transition touch-manipulation"
+          />
+          <button
+            type="button"
+            aria-label="Больше путников"
+            onClick={() => setTravelers((v) => Math.min(10, v + 1))}
+            className="h-12 w-12 rounded-2xl border border-ink-200 bg-white text-ink-900 text-lg font-medium hover:border-ink-900 transition select-none touch-manipulation disabled:opacity-40"
+            disabled={travelers >= 10}
+          >
+            +
+          </button>
+        </div>
       </div>
 
       <div>

@@ -136,9 +136,13 @@ export default function MapView({ days, accommodation }: Props) {
       zoom={5}
       scrollWheelZoom
     >
+      {/* CARTO Voyager — clean modern tiles with soft colours and crisp
+          labels. No API key required, works worldwide including RU. */}
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+        subdomains="abcd"
+        maxZoom={20}
       />
       {visibleDays.map((d) => (
         <Polyline
