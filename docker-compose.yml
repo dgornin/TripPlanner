@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-travelbuddy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-travelbuddy}
+      POSTGRES_DB: ${POSTGRES_DB:-travelbuddy}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-travelbuddy} -d ${POSTGRES_DB:-travelbuddy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-travelbuddy}:${POSTGRES_PASSWORD:-travelbuddy}@postgres:5432/${POSTGRES_DB:-travelbuddy}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      JWT_SECRET: ${JWT_SECRET:-change-me}
+      JWT_ALG: ${JWT_ALG:-HS256}
+      JWT_EXP_HOURS: ${JWT_EXP_HOURS:-72}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      USE_WHISPER: ${USE_WHISPER:-true}
+      STT_MODEL: ${STT_MODEL:-small}
+      SEED_RAG_ON_STARTUP: ${SEED_RAG_ON_STARTUP:-true}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  bot:
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.bot.main"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-travelbuddy}:${POSTGRES_PASSWORD:-travelbuddy}@postgres:5432/${POSTGRES_DB:-travelbuddy}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      JWT_SECRET: ${JWT_SECRET:-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  pgdata: {}
