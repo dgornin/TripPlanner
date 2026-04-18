@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import Map, {
-  Layer,
-  Marker,
-  Popup,
-  Source,
-  type MapRef,
-} from "react-map-gl/maplibre";
+import maplibregl, {
+  type LngLatBoundsLike,
+  type LngLatLike,
+  type Map as MlMap,
+} from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Day, Place } from "../api/trips";
 import { useUi } from "../store/uiStore";
@@ -47,10 +45,91 @@ interface Props {
   } | null;
 }
 
+function buildMarkerEl(color: string, number: number): HTMLElement {
+  const el = document.createElement("div");
+  el.style.cssText = [
+    "width:26px",
+    "height:26px",
+    "display:flex",
+    "align-items:center",
+    "justify-content:center",
+    "border-radius:50%",
+    `background:${color}`,
+    "color:white",
+    "font-family:Inter, system-ui, sans-serif",
+    "font-size:12px",
+    "font-weight:700",
+    "border:3px solid white",
+    "box-shadow:0 3px 10px rgba(0,0,0,.28)",
+    "cursor:pointer",
+    "user-select:none",
+  ].join(";");
+  el.textContent = String(number);
+  return el;
+}
+
+function buildHomeEl(): HTMLElement {
+  const el = document.createElement("div");
+  el.style.cssText = [
+    "width:34px",
+    "height:34px",
+    "display:flex",
+    "align-items:center",
+    "justify-content:center",
+    "border-radius:12px",
+    "background:#0b1220",
+    "color:white",
+    "border:3px solid white",
+    "box-shadow:0 6px 18px rgba(0,0,0,.35)",
+    "cursor:pointer",
+  ].join(";");
+  el.innerHTML =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2V9.5z"/></svg>';
+  el.setAttribute("aria-label", "Место проживания");
+  return el;
+}
+
+function buildPlacePopupHtml(m: Enriched): string {
+  const desc = m.place.description
+    ? `<div style="color:#6b7280;margin-top:6px;font-size:12px;line-height:1.5;max-width:240px;">${escapeHtml(m.place.description)}</div>`
+    : "";
+  const dur = m.place.duration_minutes
+    ? `<div style="font-size:12px;color:#f97316;margin-top:8px;font-weight:500;">≈ ${m.place.duration_minutes} мин</div>`
+    : "";
+  const dayLine = `День ${m.day.day_number}${m.day.title ? " · " + escapeHtml(m.day.title) : ""}`;
+  return `
+    <div style="font-size:14px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#6b7280;font-weight:600;">${dayLine}</div>
+      <div style="font-family:Unbounded, Inter, system-ui, sans-serif;font-size:16px;color:#0b1220;margin-top:2px;">${escapeHtml(m.place.name)}</div>
+      ${desc}
+      ${dur}
+    </div>`;
+}
+
+function buildHomePopupHtml(name: string | null): string {
+  return `
+    <div style="font-size:14px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#6b7280;font-weight:600;">Место проживания</div>
+      <div style="font-family:Unbounded, Inter, system-ui, sans-serif;font-size:16px;color:#0b1220;margin-top:2px;">${escapeHtml(name || "Отель")}</div>
+    </div>`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export default function MapView({ days, accommodation }: Props) {
   const selected = useUi((s) => s.selectedDay);
-  const visibleDays =
-    selected == null ? days : days.filter((d) => d.day_number === selected);
+  const visibleDays = useMemo(
+    () =>
+      selected == null ? days : days.filter((d) => d.day_number === selected),
+    [days, selected],
+  );
 
   const markers: Enriched[] = useMemo(() => {
     let idx = 0;
@@ -66,73 +145,104 @@ export default function MapView({ days, accommodation }: Props) {
 
   const home: { lat: number; lon: number; name: string | null } | null =
     accommodation && accommodation.lat != null && accommodation.lon != null
-      ? { lat: accommodation.lat, lon: accommodation.lon, name: accommodation.name }
+      ? {
+          lat: accommodation.lat,
+          lon: accommodation.lon,
+          name: accommodation.name,
+        }
       : null;
 
-  // MapLibre uses [lon, lat] order — unlike Leaflet.
-  const points: [number, number][] = markers.map((m) => [m.place.lon, m.place.lat]);
-  if (home) points.push([home.lon, home.lat]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MlMap | null>(null);
+  const markerObjectsRef = useRef<maplibregl.Marker[]>([]);
+  const [styleLoaded, setStyleLoaded] = useState(false);
 
-  const bounds = useMemo<[[number, number], [number, number]] | null>(() => {
-    if (points.length === 0) return null;
-    let minLon = points[0][0];
-    let maxLon = points[0][0];
-    let minLat = points[0][1];
-    let maxLat = points[0][1];
-    for (const [lon, lat] of points) {
-      if (lon < minLon) minLon = lon;
-      if (lon > maxLon) maxLon = lon;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-    }
-    return [
-      [minLon, minLat],
-      [maxLon, maxLat],
-    ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(points)]);
-
-  const mapRef = useRef<MapRef | null>(null);
-  const [mapReady, setMapReady] = useState(false);
-
-  // Fit bounds whenever the trip's point set changes OR when the map first
-  // finishes loading its style (refs resolve before effects run, but tiles
-  // aren't ready yet — fitBounds on a still-initialising map silently fails).
+  // --- Initialise the map once on mount. ---
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !bounds) return;
-    const isSingle =
-      bounds[0][0] === bounds[1][0] && bounds[0][1] === bounds[1][1];
-    if (isSingle) {
-      map.easeTo({ center: bounds[0], zoom: 13, duration: 600 });
-    } else {
-      map.fitBounds(bounds, { padding: 60, duration: 600 });
-    }
-  }, [bounds, mapReady]);
+    if (!containerRef.current) return;
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: DEFAULT_STYLE_URL,
+      center: [37.62, 55.75],
+      zoom: 4,
+      attributionControl: { compact: true },
+      // `preserveDrawingBuffer` keeps the WebGL buffer around so the first
+      // compositor sample isn't a black frame. Cast via `as any` because
+      // the option is valid at runtime but not in the v5 TS `MapOptions`.
+      ...({ preserveDrawingBuffer: true } as Record<string, unknown>),
+    });
+    mapRef.current = map;
 
-  // The map container often resolves its height AFTER MapLibre constructs
-  // its canvas (because of the flex-row parent). Force a resize once we
-  // know both the map and its parent have laid out, otherwise the initial
-  // frame is a blank WebGL context. Also fire a couple of explicit repaints
-  // after mount — without them some browsers happily skip the first frame.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    map.resize();
-    map.triggerRepaint();
-    const t1 = window.setTimeout(() => map.triggerRepaint(), 120);
-    const t2 = window.setTimeout(() => map.triggerRepaint(), 400);
+    map.on("load", () => {
+      setStyleLoaded(true);
+      // Belt-and-braces: prod sometimes reports a zero-height container
+      // during the first layout pass (flex parent). Resize + repaint so
+      // the first visible frame is guaranteed.
+      map.resize();
+      map.triggerRepaint();
+    });
+
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
+      map.remove();
+      mapRef.current = null;
+      setStyleLoaded(false);
     };
-  }, [mapReady]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // One GeoJSON FeatureCollection with one LineString per visible day.
-  // Using a single Source/Layer keeps the layer count low regardless of
-  // how many days the trip spans.
-  const routesGeoJson = useMemo(
-    () => ({
+  // --- Observe container size changes, tell MapLibre to resize. ---
+  useEffect(() => {
+    const el = containerRef.current;
+    const map = mapRef.current;
+    if (!el || !map) return;
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // --- Render markers. ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoaded) return;
+    // Nuke previous markers.
+    for (const m of markerObjectsRef.current) m.remove();
+    markerObjectsRef.current = [];
+
+    for (const m of markers) {
+      const el = buildMarkerEl(m.color, m.globalIndex);
+      const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat([m.place.lon, m.place.lat])
+        .setPopup(
+          new maplibregl.Popup({
+            offset: 16,
+            closeButton: false,
+            closeOnClick: true,
+          }).setHTML(buildPlacePopupHtml(m)),
+        )
+        .addTo(map);
+      markerObjectsRef.current.push(marker);
+    }
+    if (home) {
+      const el = buildHomeEl();
+      const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat([home.lon, home.lat])
+        .setPopup(
+          new maplibregl.Popup({
+            offset: 20,
+            closeButton: false,
+            closeOnClick: true,
+          }).setHTML(buildHomePopupHtml(home.name)),
+        )
+        .addTo(map);
+      markerObjectsRef.current.push(marker);
+    }
+  }, [markers, home?.lat, home?.lon, home?.name, styleLoaded]);
+
+  // --- Render the per-day route lines as a single GeoJSON source. ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoaded) return;
+    const data = {
       type: "FeatureCollection" as const,
       features: visibleDays
         .filter((d) => d.places.length >= 2)
@@ -146,183 +256,68 @@ export default function MapView({ days, accommodation }: Props) {
             coordinates: d.places.map((p) => [p.lon, p.lat]),
           },
         })),
-    }),
-    [visibleDays],
-  );
+    };
 
-  // Which marker's popup is open (null = none). Keyed by place id.
-  const [openPopupId, setOpenPopupId] = useState<string | null>(null);
+    const src = map.getSource("tb-routes") as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (src) {
+      src.setData(data);
+    } else {
+      map.addSource("tb-routes", { type: "geojson", data });
+      map.addLayer({
+        id: "tb-routes-line",
+        type: "line",
+        source: "tb-routes",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 4,
+          "line-opacity": 0.7,
+          "line-dasharray": [1.8, 1.8],
+        },
+      });
+    }
+  }, [visibleDays, styleLoaded]);
 
-  return (
-    <Map
-      ref={mapRef}
-      mapStyle={DEFAULT_STYLE_URL}
-      initialViewState={{
-        longitude: 37.62,
-        latitude: 55.75,
-        zoom: 4,
-      }}
-      style={{ width: "100%", height: "100%" }}
-      attributionControl={{ compact: true }}
-      onLoad={() => setMapReady(true)}
-      onClick={() => setOpenPopupId(null)}
-      // preserveDrawingBuffer: keep the WebGL buffer after each frame so the
-      // initial paint survives compositor timing quirks (without it, some
-      // browsers show a black canvas until the user interacts). react-map-gl
-      // does not type this option but it passes through to maplibre-gl.
-      {...({ preserveDrawingBuffer: true } as Record<string, unknown>)}
-    >
-      {routesGeoJson.features.length > 0 && (
-        <Source id="tb-routes" type="geojson" data={routesGeoJson}>
-          <Layer
-            id="tb-routes-line"
-            type="line"
-            layout={{ "line-cap": "round", "line-join": "round" }}
-            paint={{
-              "line-color": ["get", "color"],
-              "line-width": 4,
-              "line-opacity": 0.7,
-              "line-dasharray": [1.8, 1.8],
-            }}
-          />
-        </Source>
-      )}
+  // --- Fit bounds whenever the point set changes. ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoaded) return;
+    const points: [number, number][] = markers.map((m) => [
+      m.place.lon,
+      m.place.lat,
+    ]);
+    if (home) points.push([home.lon, home.lat]);
+    if (points.length === 0) return;
 
-      {markers.map((m) => {
-        const active = openPopupId === m.place.id;
-        return (
-          <Marker
-            key={m.place.id}
-            longitude={m.place.lon}
-            latitude={m.place.lat}
-            anchor="center"
-            onClick={(e) => {
-              e.originalEvent.stopPropagation();
-              setOpenPopupId(active ? null : m.place.id);
-            }}
-          >
-            <div
-              style={{
-                width: 26,
-                height: 26,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: "50%",
-                background: m.color,
-                color: "white",
-                fontFamily: "Inter, system-ui, sans-serif",
-                fontSize: 12,
-                fontWeight: 700,
-                border: "3px solid white",
-                boxShadow: "0 3px 10px rgba(0,0,0,.28)",
-                cursor: "pointer",
-                userSelect: "none",
-              }}
-            >
-              {m.globalIndex}
-            </div>
-          </Marker>
-        );
-      })}
+    let minLon = points[0][0];
+    let maxLon = points[0][0];
+    let minLat = points[0][1];
+    let maxLat = points[0][1];
+    for (const [lon, lat] of points) {
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+    const isSingle = minLon === maxLon && minLat === maxLat;
+    if (isSingle) {
+      map.easeTo({
+        center: [minLon, minLat] as LngLatLike,
+        zoom: 13,
+        duration: 600,
+      });
+    } else {
+      map.fitBounds(
+        [
+          [minLon, minLat],
+          [maxLon, maxLat],
+        ] as LngLatBoundsLike,
+        { padding: 60, duration: 600 },
+      );
+    }
+  }, [markers, home?.lat, home?.lon, styleLoaded]);
 
-      {markers
-        .filter((m) => openPopupId === m.place.id)
-        .map((m) => (
-          <Popup
-            key={`popup-${m.place.id}`}
-            longitude={m.place.lon}
-            latitude={m.place.lat}
-            anchor="bottom"
-            offset={16}
-            closeButton={false}
-            onClose={() => setOpenPopupId(null)}
-          >
-            <div className="text-sm">
-              <div className="text-[10px] uppercase tracking-wider text-ink-500 font-semibold">
-                День {m.day.day_number}
-                {m.day.title ? ` · ${m.day.title}` : ""}
-              </div>
-              <div className="font-display text-base text-ink-900 mt-0.5">
-                {m.place.name}
-              </div>
-              {m.place.description && (
-                <div className="text-ink-500 mt-1.5 text-xs leading-relaxed max-w-[240px]">
-                  {m.place.description}
-                </div>
-              )}
-              {m.place.duration_minutes ? (
-                <div className="text-xs text-brand-600 mt-2 font-medium">
-                  ≈ {m.place.duration_minutes} мин
-                </div>
-              ) : null}
-            </div>
-          </Popup>
-        ))}
-
-      {home && (
-        <Marker
-          longitude={home.lon}
-          latitude={home.lat}
-          anchor="center"
-          onClick={(e) => {
-            e.originalEvent.stopPropagation();
-            setOpenPopupId(openPopupId === "__home__" ? null : "__home__");
-          }}
-        >
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 12,
-              background: "#0b1220",
-              color: "white",
-              border: "3px solid white",
-              boxShadow: "0 6px 18px rgba(0,0,0,.35)",
-              cursor: "pointer",
-              userSelect: "none",
-            }}
-            aria-label="Место проживания"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 9.5 12 3l9 6.5V20a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2V9.5z" />
-            </svg>
-          </div>
-        </Marker>
-      )}
-
-      {home && openPopupId === "__home__" && (
-        <Popup
-          longitude={home.lon}
-          latitude={home.lat}
-          anchor="bottom"
-          offset={20}
-          closeButton={false}
-          onClose={() => setOpenPopupId(null)}
-        >
-          <div className="text-sm">
-            <div className="text-[10px] uppercase tracking-wider text-ink-500 font-semibold">
-              Место проживания
-            </div>
-            <div className="font-display text-base text-ink-900 mt-0.5">
-              {home.name || "Отель"}
-            </div>
-          </div>
-        </Popup>
-      )}
-    </Map>
-  );
+  return <div ref={containerRef} className="h-full w-full" />;
 }
