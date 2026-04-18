@@ -32,6 +32,7 @@ class TripBase(BaseModel):
     end_date: dt.date | None = None
     travelers: int = 1
     interests: list[str] = Field(default_factory=list)
+    accommodation: str | None = Field(default=None, max_length=500)
 
 
 class TripCreate(TripBase):
@@ -41,6 +42,7 @@ class TripCreate(TripBase):
 class TripPatch(BaseModel):
     title: str | None = None
     is_public: bool | None = None
+    accommodation: str | None = None
 
 
 class TripSummary(BaseModel):
@@ -57,6 +59,8 @@ class TripOut(TripBase):
     id: str
     summary: str | None = None
     is_public: bool
+    accommodation_lat: float | None = None
+    accommodation_lon: float | None = None
     days: list[DayOut] = Field(default_factory=list)
     created_at: dt.datetime
     updated_at: dt.datetime

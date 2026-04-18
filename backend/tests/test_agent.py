@@ -12,6 +12,7 @@ from typing import Any
 
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.agent import tools as tools_mod
 from app.agent.runner import run_agent
@@ -30,7 +31,15 @@ def _fake_llm(messages: list[AIMessage]) -> Any:
     return _ToolCallingFake(responses=messages)
 
 
-async def test_agent_adds_place_via_fake_llm(db_session, monkeypatch):
+async def test_agent_adds_place_via_fake_llm(engine, db_session, monkeypatch):
+    # Point tools' session maker at the test engine so their fresh sessions
+    # talk to the same throwaway DB as db_session.
+    test_maker = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(tools_mod, "_SessionMaker", test_maker)
+    # snapshot_trip in the runner also opens a fresh session via SessionLocal.
+    from app.db import session as db_session_mod
+    monkeypatch.setattr(db_session_mod, "SessionLocal", test_maker)
+
     user = User(email="x@y.ru", password_hash="x")
     db_session.add(user)
     await db_session.flush()

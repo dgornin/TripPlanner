@@ -68,7 +68,16 @@ export default function TripDetailPage() {
       selectedDay={selectedDay}
       onSelectDay={setSelectedDay}
       onShare={share}
-      MapSlot={<MapView days={trip.days} />}
+      MapSlot={
+        <MapView
+          days={trip.days}
+          accommodation={{
+            name: trip.accommodation,
+            lat: trip.accommodation_lat,
+            lon: trip.accommodation_lon,
+          }}
+        />
+      }
       ItinerarySlot={<Itinerary trip={trip} />}
       ChatSlot={<ChatPanel tripId={trip.id} onState={onState} />}
     />

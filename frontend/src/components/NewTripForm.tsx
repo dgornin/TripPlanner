@@ -23,6 +23,7 @@ export default function NewTripForm() {
   const [end, setEnd] = useState("");
   const [travelers, setTravelers] = useState(1);
   const [interests, setInterests] = useState<string[]>(["culture"]);
+  const [accommodation, setAccommodation] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +43,7 @@ export default function NewTripForm() {
         end_date: end || null,
         travelers,
         interests,
+        accommodation: accommodation.trim() || null,
       });
       track("trip_created", { destination });
       qc.invalidateQueries({ queryKey: ["trips"] });
@@ -104,6 +106,25 @@ export default function NewTripForm() {
           onChange={(e) => setTravelers(parseInt(e.target.value || "1", 10))}
           className="w-full h-12 px-4 rounded-2xl border border-ink-200 bg-white text-ink-900 outline-none focus:border-ink-900 focus:ring-2 focus:ring-brand-500/30 transition"
         />
+      </div>
+
+      <div>
+        <div className="flex items-baseline justify-between mb-1.5">
+          <span className="text-sm font-medium text-ink-900">
+            Где живёте в городе
+          </span>
+          <span className="text-xs text-ink-500">необязательно</span>
+        </div>
+        <input
+          type="text"
+          value={accommodation}
+          onChange={(e) => setAccommodation(e.target.value)}
+          placeholder="Отель Шаляпин, ул. Баумана 7"
+          className="w-full h-12 px-4 rounded-2xl border border-ink-200 bg-white text-ink-900 outline-none focus:border-ink-900 focus:ring-2 focus:ring-brand-500/30 transition"
+        />
+        <div className="text-xs text-ink-500 mt-1">
+          Агент будет строить маршруты от этой точки, чтобы меньше петлять.
+        </div>
       </div>
 
       <div>

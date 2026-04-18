@@ -18,6 +18,7 @@ from app.schemas.trips import (
     TripPatch,
     TripSummary,
 )
+from app.services import geocoding
 
 router = APIRouter(prefix="/api/trips", tags=["trips"])
 public_router = APIRouter(prefix="/api/public", tags=["public"])
@@ -58,6 +59,9 @@ def trip_out(t: Trip) -> TripOut:
         interests=list(t.interests or []),
         summary=t.summary,
         is_public=t.is_public,
+        accommodation=t.accommodation,
+        accommodation_lat=t.accommodation_lat,
+        accommodation_lon=t.accommodation_lon,
         days=[_day_out(d) for d in t.days],
         created_at=t.created_at,
         updated_at=t.updated_at,
@@ -74,12 +78,34 @@ async def _load_full(db: AsyncSession, trip_id: uuid.UUID) -> Trip | None:
     ).scalar_one_or_none()
 
 
+async def _geocode_accommodation(
+    accommodation: str | None, destination: str
+) -> tuple[float | None, float | None]:
+    """Try to resolve the accommodation text to lat/lon via Nominatim.
+    Returns (None, None) on any failure — the agent can still search later."""
+    if not accommodation:
+        return (None, None)
+    try:
+        results = await geocoding.search_places(
+            accommodation, near_city=destination, limit=1
+        )
+    except Exception:  # noqa: BLE001
+        return (None, None)
+    if not results:
+        return (None, None)
+    r = results[0]
+    return (float(r["lat"]), float(r["lon"]))
+
+
 @router.post("", response_model=TripOut)
 async def create_trip(
     body: TripCreate,
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    acc_lat, acc_lon = await _geocode_accommodation(
+        body.accommodation, body.destination
+    )
     trip = Trip(
         user_id=user.id,
         title=body.title,
@@ -88,6 +114,9 @@ async def create_trip(
         end_date=body.end_date,
         travelers=body.travelers,
         interests=body.interests,
+        accommodation=body.accommodation,
+        accommodation_lat=acc_lat,
+        accommodation_lon=acc_lon,
     )
     if body.start_date and body.end_date:
         n = (body.end_date - body.start_date).days + 1
@@ -101,7 +130,11 @@ async def create_trip(
         Event(
             user_id=user.id,
             type="trip_created",
-            props={"trip_id": str(trip.id), "destination": trip.destination},
+            props={
+                "trip_id": str(trip.id),
+                "destination": trip.destination,
+                "has_accommodation": bool(body.accommodation),
+            },
         )
     )
     await db.commit()
@@ -168,6 +201,17 @@ async def patch_trip(
                     props={"trip_id": str(trip.id)},
                 )
             )
+    if body.accommodation is not None:
+        trip.accommodation = body.accommodation or None
+        if body.accommodation:
+            lat, lon = await _geocode_accommodation(
+                body.accommodation, trip.destination
+            )
+            trip.accommodation_lat = lat
+            trip.accommodation_lon = lon
+        else:
+            trip.accommodation_lat = None
+            trip.accommodation_lon = None
     await db.commit()
     trip = await _load_full(db, trip_id)
     assert trip is not None

@@ -30,6 +30,9 @@ export type Trip = {
   interests: string[];
   summary: string | null;
   is_public: boolean;
+  accommodation: string | null;
+  accommodation_lat: number | null;
+  accommodation_lon: number | null;
   days: Day[];
   created_at: string;
   updated_at: string;
@@ -52,6 +55,7 @@ export const createTrip = (body: {
   travelers?: number;
   interests?: string[];
   title?: string;
+  accommodation?: string | null;
 }) => api.post<Trip>("/trips", body).then((r) => r.data);
 
 export const listTrips = () =>

@@ -1,4 +1,4 @@
-import { Clock } from "lucide-react";
+import { Clock, Home } from "lucide-react";
 import type { Trip } from "../api/trips";
 import { useUi } from "../store/uiStore";
 
@@ -21,6 +21,26 @@ export default function Itinerary({ trip }: { trip: Trip }) {
 
   return (
     <div className="space-y-5">
+      {trip.accommodation && (
+        <div className="flex items-start gap-3 rounded-2xl bg-ink-900 text-white p-3.5">
+          <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500/20 text-brand-300 shrink-0">
+            <Home size={16} />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold">
+              Место проживания
+            </div>
+            <div className="text-sm font-medium mt-0.5 break-words">
+              {trip.accommodation}
+            </div>
+            {trip.accommodation_lat == null && (
+              <div className="text-[11px] text-white/60 mt-1">
+                Координаты не нашлись — агент уточнит адрес по пути.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {trip.summary && (
         <p className="text-sm text-ink-700 leading-relaxed">{trip.summary}</p>
       )}

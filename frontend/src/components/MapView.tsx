@@ -8,7 +8,7 @@ import {
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
-import type { Day, Place } from "../api/trips";
+import type { Day, Place, Trip } from "../api/trips";
 import { useUi } from "../store/uiStore";
 
 const dayColors = [
@@ -46,6 +46,28 @@ function makeIcon(color: string, number: number) {
   });
 }
 
+function makeHomeIcon() {
+  return L.divIcon({
+    className: "",
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    html: `
+      <div style="
+        position:relative;
+        width:34px;height:34px;
+        display:flex;align-items:center;justify-content:center;
+        border-radius:12px;
+        background:#0b1220;
+        color:white;
+        border:3px solid white;
+        box-shadow:0 6px 18px rgba(0,0,0,.35);
+      ">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2V9.5z"/></svg>
+      </div>
+    `,
+  });
+}
+
 function FitBounds({ points }: { points: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
@@ -70,7 +92,16 @@ type Enriched = {
   globalIndex: number;
 };
 
-export default function MapView({ days }: { days: Day[] }) {
+interface Props {
+  days: Day[];
+  accommodation?: {
+    name: string | null;
+    lat: number | null;
+    lon: number | null;
+  } | null;
+}
+
+export default function MapView({ days, accommodation }: Props) {
   const selected = useUi((s) => s.selectedDay);
   const visibleDays =
     selected == null ? days : days.filter((d) => d.day_number === selected);
@@ -87,10 +118,16 @@ export default function MapView({ days }: { days: Day[] }) {
     );
   }, [visibleDays]);
 
+  const home: [number, number] | null =
+    accommodation && accommodation.lat != null && accommodation.lon != null
+      ? [accommodation.lat, accommodation.lon]
+      : null;
+
   const points: [number, number][] = markers.map((m) => [
     m.place.lat,
     m.place.lon,
   ]);
+  if (home) points.push(home);
 
   return (
     <MapContainer
@@ -144,6 +181,20 @@ export default function MapView({ days }: { days: Day[] }) {
           </Popup>
         </Marker>
       ))}
+      {home && (
+        <Marker position={home} icon={makeHomeIcon()} zIndexOffset={1000}>
+          <Popup>
+            <div className="text-sm">
+              <div className="text-[10px] uppercase tracking-wider text-ink-500 font-semibold">
+                Место проживания
+              </div>
+              <div className="font-display text-base text-ink-900 mt-0.5">
+                {accommodation?.name || "Отель"}
+              </div>
+            </div>
+          </Popup>
+        </Marker>
+      )}
       <FitBounds points={points} />
     </MapContainer>
   );

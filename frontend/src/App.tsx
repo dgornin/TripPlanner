@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -14,14 +15,42 @@ import AdminPage from "./pages/AdminPage";
 import TelegramSettingsPage from "./pages/TelegramSettingsPage";
 import PublicTripPage from "./pages/PublicTripPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { useAuth } from "./store/authStore";
+
+function GuestOnly({ children }: { children: React.ReactNode }) {
+  const { user, loaded } = useAuth();
+  if (!loaded) return null;
+  if (user) return <Navigate to="/app/trips" replace />;
+  return <>{children}</>;
+}
 
 export default function App() {
+  const load = useAuth((s) => s.load);
+  const loaded = useAuth((s) => s.loaded);
+  useEffect(() => {
+    if (!loaded) load();
+  }, [load, loaded]);
+
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
+        <Route
+          path="/login"
+          element={
+            <GuestOnly>
+              <LoginPage />
+            </GuestOnly>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <GuestOnly>
+              <SignupPage />
+            </GuestOnly>
+          }
+        />
         <Route path="/share/trips/:id" element={<PublicTripPage />} />
 
         <Route

@@ -106,6 +106,26 @@ make bot-dev                 # telegram long-polling (optional)
 
 Open http://localhost:5173, sign up, describe a trip.
 
+### Demo credentials
+
+Two accounts were created during end-to-end testing — safe to re-use locally:
+
+| Email | Password | Role |
+|---|---|---|
+| `chrome@local.ru` | `secret1` | admin (sees `/app/admin`) |
+| `demo@local.ru` | `secret1` | regular user |
+
+Passwords are stored as bcrypt hashes; re-run SQL to rotate them:
+
+```sql
+-- Reset to 'secret1' (pre-computed bcrypt)
+UPDATE users
+SET password_hash = '$2b$12$rXqNd83xYwYkVhpzO3Iue.lJxWjyRxB5/Pd2Ov/O9YZDBr1rJR4/K'
+WHERE email IN ('chrome@local.ru', 'demo@local.ru');
+```
+
+> Or hit `POST /api/auth/signup` to create a fresh account — it's free and instant.
+
 ### Full-stack via compose (podman or docker)
 
 ```bash

@@ -1,19 +1,22 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowUpRight,
   Compass,
   MapPinned,
+  Menu,
   Mic,
   MessageSquare,
   Share2,
   Sparkles,
+  X,
 } from "lucide-react";
 import { buttonClasses } from "../components/ui/Button";
 import { Container, Section } from "../components/ui/Container";
 import { Logo } from "../components/ui/Logo";
 import { track } from "../lib/analytics";
+import { useAuth } from "../store/authStore";
 
 const pins = [
   { n: 1, x: 130, y: 170, name: "Москва", delay: 0.2 },
@@ -26,9 +29,10 @@ function HeroRouteMap() {
   return (
     <div className="relative aspect-[1/1] w-full">
       <div
-        className="absolute inset-0 rounded-3xl bg-white shadow-glass overflow-hidden"
+        className="absolute inset-0 rounded-3xl bg-[#f5f1e8] shadow-glass overflow-hidden"
         aria-hidden
       >
+        {/* Paper grid */}
         <svg
           className="absolute inset-0 w-full h-full opacity-[0.08]"
           viewBox="0 0 500 500"
@@ -57,7 +61,90 @@ function HeroRouteMap() {
             />
           ))}
         </svg>
-        <div className="absolute inset-0 bg-noise opacity-50 mix-blend-multiply" aria-hidden />
+        {/* Stylized map: water body, roads, borders, scattered settlements */}
+        <svg
+          className="absolute inset-0 w-full h-full"
+          viewBox="0 0 500 500"
+          preserveAspectRatio="none"
+        >
+          {/* Water body on the top-right — evokes Volga / an inland sea */}
+          <path
+            d="M 340 60 C 380 50 430 80 460 120 C 480 160 470 210 430 235 C 395 255 370 225 355 190 C 340 160 320 120 340 60 Z"
+            fill="#c9dce6"
+            opacity="0.7"
+          />
+          {/* River meandering through the map */}
+          <path
+            d="M 60 390 C 120 360 180 410 230 370 C 270 338 300 310 345 290 C 380 274 410 240 445 235"
+            fill="none"
+            stroke="#a4c4d1"
+            strokeWidth="8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.6"
+          />
+          {/* Primary roads */}
+          <path
+            d="M 30 260 C 120 250 190 230 260 215 C 330 200 395 175 475 145"
+            fill="none"
+            stroke="#d9d2bf"
+            strokeWidth="6"
+            strokeLinecap="round"
+          />
+          <path
+            d="M 140 20 C 155 100 170 180 185 265 C 200 335 220 410 240 480"
+            fill="none"
+            stroke="#d9d2bf"
+            strokeWidth="5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M 80 460 C 150 430 230 395 300 340 C 360 295 390 240 420 180"
+            fill="none"
+            stroke="#ead9c1"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray="1 0"
+          />
+          {/* Secondary roads (thinner, darker) */}
+          <g stroke="#c9c1ad" strokeWidth="1.2" strokeLinecap="round" fill="none">
+            <path d="M 120 130 L 200 180" />
+            <path d="M 230 240 L 320 290" />
+            <path d="M 290 110 L 370 145" />
+            <path d="M 90 330 L 175 310" />
+            <path d="M 380 290 L 445 330" />
+          </g>
+          {/* Country / oblast borders — light dotted lines */}
+          <g stroke="#b5a986" strokeWidth="1" strokeDasharray="4 5" fill="none">
+            <path d="M 0 180 C 80 160 140 200 200 175 C 260 155 320 190 380 170 C 430 155 470 180 500 170" />
+            <path d="M 240 0 C 250 80 270 160 260 240 C 250 320 270 400 260 500" />
+          </g>
+          {/* Additional tiny settlement dots — villages */}
+          <g fill="#7a6e52" opacity="0.55">
+            {[
+              [80, 120],
+              [175, 70],
+              [350, 60],
+              [90, 250],
+              [160, 320],
+              [310, 355],
+              [430, 380],
+              [460, 440],
+              [70, 435],
+              [35, 330],
+              [270, 145],
+              [410, 75],
+              [245, 420],
+              [325, 455],
+            ].map(([cx, cy]) => (
+              <circle key={`s-${cx}-${cy}`} cx={cx} cy={cy} r="1.5" />
+            ))}
+          </g>
+        </svg>
+        <div
+          className="absolute inset-0 bg-noise opacity-50 mix-blend-multiply"
+          aria-hidden
+        />
       </div>
 
       <svg
@@ -166,6 +253,9 @@ function HeroRouteMap() {
 }
 
 export default function LandingPage() {
+  const { user } = useAuth();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   useEffect(() => {
     track("page_view", { path: "/" });
   }, []);
@@ -185,7 +275,7 @@ export default function LandingPage() {
         aria-hidden
       />
 
-      <header className="relative z-10">
+      <header className="relative z-20">
         <Container className="py-6 flex items-center justify-between">
           <Logo />
           <nav className="hidden md:flex items-center gap-8 text-sm text-ink-700">
@@ -200,18 +290,130 @@ export default function LandingPage() {
             </a>
           </nav>
           <div className="flex items-center gap-2">
-            <Link
-              to="/login"
-              className="text-sm font-medium text-ink-700 hover:text-ink-900 px-4 py-2 hidden sm:inline"
+            {user ? (
+              <Link
+                to="/app/trips"
+                className={`${buttonClasses("dark", "sm")} hidden sm:inline-flex`}
+              >
+                Открыть приложение
+                <ArrowUpRight size={14} />
+              </Link>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  className="text-sm font-medium text-ink-700 hover:text-ink-900 px-4 py-2 hidden sm:inline"
+                >
+                  Войти
+                </Link>
+                <Link
+                  to="/signup"
+                  className={`${buttonClasses("dark", "sm")} hidden sm:inline-flex`}
+                >
+                  Начать бесплатно
+                </Link>
+              </>
+            )}
+            <button
+              type="button"
+              aria-label="Меню"
+              onClick={() => setMobileOpen(true)}
+              className="sm:hidden inline-flex items-center justify-center h-10 w-10 rounded-full border border-ink-200 bg-white"
             >
-              Войти
-            </Link>
-            <Link to="/signup" className={buttonClasses("dark", "sm")}>
-              Начать бесплатно
-            </Link>
+              <Menu size={18} />
+            </button>
           </div>
         </Container>
       </header>
+
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            key="drawer"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-sm sm:hidden"
+            onClick={() => setMobileOpen(false)}
+          >
+            <motion.nav
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-4 inset-x-4 rounded-3xl bg-white shadow-glass p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <Logo />
+                <button
+                  aria-label="Закрыть меню"
+                  onClick={() => setMobileOpen(false)}
+                  className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-ink-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <ul className="space-y-1 text-lg font-display text-ink-900">
+                <li>
+                  <a
+                    href="#how"
+                    className="block py-3 border-b border-ink-100"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Как работает
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#features"
+                    className="block py-3 border-b border-ink-100"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Возможности
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#faq"
+                    className="block py-3 border-b border-ink-100"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    FAQ
+                  </a>
+                </li>
+              </ul>
+              <div className="mt-6 grid gap-3">
+                {user ? (
+                  <Link
+                    to="/app/trips"
+                    className={buttonClasses("dark", "lg")}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Открыть приложение <ArrowUpRight size={16} />
+                  </Link>
+                ) : (
+                  <>
+                    <Link
+                      to="/signup"
+                      className={buttonClasses("primary", "lg")}
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      Начать бесплатно
+                    </Link>
+                    <Link
+                      to="/login"
+                      className={buttonClasses("outline", "md")}
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      Войти
+                    </Link>
+                  </>
+                )}
+              </div>
+            </motion.nav>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <section className="relative">
         <Container className="relative pt-10 pb-24 md:pt-16 md:pb-32">
@@ -258,8 +460,11 @@ export default function LandingPage() {
               </p>
 
               <div className="mt-10 flex flex-wrap items-center gap-4">
-                <Link to="/signup" className={buttonClasses("primary", "lg")}>
-                  Спланировать поездку
+                <Link
+                  to={user ? "/app/trips" : "/signup"}
+                  className={buttonClasses("primary", "lg")}
+                >
+                  {user ? "Открыть приложение" : "Спланировать поездку"}
                   <ArrowUpRight size={18} />
                 </Link>
                 <a
@@ -459,8 +664,12 @@ export default function LandingPage() {
                 рождается прямо сейчас.
               </h2>
               <div className="flex flex-col items-start md:items-end gap-4">
-                <Link to="/signup" className={buttonClasses("dark", "lg")}>
-                  Спланировать поездку <ArrowUpRight size={18} />
+                <Link
+                  to={user ? "/app/trips" : "/signup"}
+                  className={buttonClasses("dark", "lg")}
+                >
+                  {user ? "Открыть приложение" : "Спланировать поездку"}{" "}
+                  <ArrowUpRight size={18} />
                 </Link>
                 <div className="text-sm text-white/80">
                   Бесплатно · Без привязки карты · 30 секунд на старт

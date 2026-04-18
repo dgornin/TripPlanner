@@ -55,6 +55,9 @@ class Trip(Base):
     travelers: Mapped[int] = mapped_column(Integer, default=1)
     interests: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     summary: Mapped[str | None] = mapped_column(Text)
+    accommodation: Mapped[str | None] = mapped_column(Text)
+    accommodation_lat: Mapped[float | None] = mapped_column(Float)
+    accommodation_lon: Mapped[float | None] = mapped_column(Float)
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

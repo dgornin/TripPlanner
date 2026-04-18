@@ -124,10 +124,24 @@ async def run_agent(
     await db.commit()
 
     # Build message list: system + prior history + new user.
+    acc_bits: list[str] = []
+    if trip.accommodation:
+        acc_bits.append(f"место проживания: \"{trip.accommodation}\"")
+        if trip.accommodation_lat is not None and trip.accommodation_lon is not None:
+            acc_bits.append(
+                f"координаты жилья: lat={trip.accommodation_lat:.5f}, "
+                f"lon={trip.accommodation_lon:.5f}"
+            )
+            acc_bits.append(
+                "Выстраивай порядок точек в дне так, чтобы маршрут начинался "
+                "рядом с жильём и возвращался к нему — меньше лишних перемещений."
+            )
     ctx_note = (
         f"Контекст поездки: город={trip.destination}, "
         f"интересы={list(trip.interests or [])}, дней={len(trip.days)}."
     )
+    if acc_bits:
+        ctx_note += "\n" + " ".join(acc_bits)
     history = await _load_history(db, trip.id)
     messages: list[BaseMessage] = [
         SystemMessage(content=SYSTEM_PROMPT + "\n\n" + ctx_note),

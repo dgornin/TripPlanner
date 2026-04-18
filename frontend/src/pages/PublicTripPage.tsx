@@ -54,7 +54,14 @@ export default function PublicTripPage() {
 
       <div className="absolute inset-0 pt-[56px]">
         <div className="absolute inset-0">
-          <MapView days={trip.days} />
+          <MapView
+            days={trip.days}
+            accommodation={{
+              name: trip.accommodation,
+              lat: trip.accommodation_lat,
+              lon: trip.accommodation_lon,
+            }}
+          />
         </div>
         <div className="absolute top-5 left-1/2 -translate-x-1/2 z-20">
           <DaySelector
