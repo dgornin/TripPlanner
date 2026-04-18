@@ -18,19 +18,25 @@ body {
   @apply bg-ink-50 text-ink-900 font-sans antialiased;
 }
 
-.leaflet-container {
+/* MapLibre GL container — keep its canvas underneath our floating cards. */
+.maplibregl-map {
   width: 100%;
   height: 100%;
   background: #f5f5f4;
-  /* Contain Leaflet's internal pane z-indexes (200-700) within its own
-     stacking context so our overlays (z-20/z-30) can render above it. */
+  /* Contain MapLibre's canvas stacking inside its own context so our
+     overlays (z-20/z-30) render above it without fighting pane z-indexes. */
   isolation: isolate;
 }
 
-/* hide leaflet default marker shadow that doesn't exist for div-icons */
-.leaflet-marker-icon.leaflet-div-icon {
-  background: transparent;
-  border: none;
+/* Pop-up tweaks so the default Mapbox-style bubble matches our ink palette. */
+.maplibregl-popup-content {
+  border-radius: 14px !important;
+  padding: 12px 14px !important;
+  box-shadow: 0 12px 32px -10px rgba(11, 18, 32, 0.25) !important;
+  border: 1px solid rgba(11, 18, 32, 0.06) !important;
+}
+.maplibregl-popup-tip {
+  display: none !important;
 }
 
 /* Smooth scrollbar in itinerary */
