@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_USERNAME: str = "travel_buddy_ru_bot"
     NOMINATIM_USER_AGENT: str = "travel-buddy-ru/0.1 (dgornin@gmail.com)"
 
+    # Disable TLS cert verification for outgoing Anthropic calls.
+    # Needed in corporate MITM environments (e.g. Yandex internal proxy);
+    # DO NOT enable in production.
+    ANTHROPIC_DISABLE_TLS_VERIFY: bool = False
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

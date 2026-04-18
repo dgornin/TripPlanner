@@ -217,6 +217,9 @@ frontend/.env.local
 # Real env (keep only .env.example)
 .env
 
+# Dev-only CA bundles (corp MITM)
+backend/certs/
+
 # Whisper / model caches
 .cache/
 .huggingface/
