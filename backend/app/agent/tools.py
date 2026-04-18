@@ -1,55 +1,63 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from contextvars import ContextVar
 from typing import Any
 
 from langchain_core.tools import tool
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
 from app.db.models import Day, Place, Trip
+from app.db.session import engine
 from app.rag.retriever import search_kb
 from app.services import geocoding
 
+# Serializes tools that mutate the DB per-trip so that parallel add_place
+# tool calls (the agent often emits several at once) don't race on
+# order_index. A single process-wide map of locks is fine for a dev SQLite
+# / single-uvicorn setup; for multi-worker deployments, swap for an
+# advisory DB lock on (trip_id).
+_mutation_locks: dict[uuid.UUID, asyncio.Lock] = {}
+_mutation_locks_guard = asyncio.Lock()
+
+
+async def _lock_for(trip_id: uuid.UUID) -> asyncio.Lock:
+    async with _mutation_locks_guard:
+        lock = _mutation_locks.get(trip_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _mutation_locks[trip_id] = lock
+        return lock
+
 
 # ---------------------------------------------------------------------------
-# Context: the agent runner sets these before invoking the graph, so each @tool
-# implementation can reach the current SQLAlchemy session and active Trip without
-# passing them through the LLM as arguments.
+# Context: the runner sets these before invoking the graph so each @tool call
+# can reach the current Trip by id and open its own DB session. Using a
+# session-per-tool (rather than a shared one) avoids concurrent-access errors
+# when the agent dispatches tool calls in parallel.
 # ---------------------------------------------------------------------------
-_ctx_session: ContextVar[AsyncSession | None] = ContextVar("tb_session", default=None)
-_ctx_trip: ContextVar[Trip | None] = ContextVar("tb_trip", default=None)
+_ctx_trip_id: ContextVar[uuid.UUID | None] = ContextVar("tb_trip_id", default=None)
+_SessionMaker = async_sessionmaker(engine, expire_on_commit=False)
 
 
-def set_agent_context(session: AsyncSession, trip: Trip) -> tuple:
-    """Install session+trip into context for the duration of an agent run.
-    Returns tokens for later reset."""
-    return (
-        _ctx_session.set(session),
-        _ctx_trip.set(trip),
-    )
+def set_agent_context(trip_id: uuid.UUID) -> tuple:
+    """Install trip id into context for the duration of an agent run."""
+    return (_ctx_trip_id.set(trip_id),)
 
 
 def reset_agent_context(tokens: tuple) -> None:
-    session_tok, trip_tok = tokens
-    _ctx_session.reset(session_tok)
-    _ctx_trip.reset(trip_tok)
+    (trip_tok,) = tokens
+    _ctx_trip_id.reset(trip_tok)
 
 
-def _session() -> AsyncSession:
-    s = _ctx_session.get()
-    if s is None:
+def _trip_id() -> uuid.UUID:
+    tid = _ctx_trip_id.get()
+    if tid is None:
         raise RuntimeError("Agent context not set — call set_agent_context first")
-    return s
-
-
-def _trip() -> Trip:
-    t = _ctx_trip.get()
-    if t is None:
-        raise RuntimeError("Agent context not set — call set_agent_context first")
-    return t
+    return tid
 
 
 async def _find_or_create_day(db: AsyncSession, trip_id: uuid.UUID, day_number: int) -> Day:
@@ -67,14 +75,15 @@ async def _find_or_create_day(db: AsyncSession, trip_id: uuid.UUID, day_number: 
 
 
 # ---------------------------------------------------------------------------
-# Tools
+# Tools — each opens a fresh AsyncSession, commits on success, closes on exit.
 # ---------------------------------------------------------------------------
 @tool
 async def kb_search(query: str, city: str | None = None) -> list[dict]:
     """Search the internal knowledge base of Russian travel info.
     Use this FIRST to get real facts before recommending places.
     """
-    return await search_kb(_session(), query, city=city, k=5)
+    async with _SessionMaker() as db:
+        return await search_kb(db, query, city=city, k=5)
 
 
 @tool
@@ -99,25 +108,31 @@ async def add_place(
     """Add a place with coordinates to the given day of the current trip.
     `lat`/`lon` MUST come from `search_place`. Returns the new place id.
     """
-    db = _session()
-    trip = _trip()
-    day = await _find_or_create_day(db, trip.id, int(day_number))
-    existing = (await db.execute(select(Place).where(Place.day_id == day.id))).scalars().all()
-    order_index = max((p.order_index for p in existing), default=-1) + 1
-    place = Place(
-        day_id=day.id,
-        order_index=order_index,
-        name=name,
-        description=description,
-        lat=float(lat),
-        lon=float(lon),
-        duration_minutes=duration_minutes,
-        category=category,
-        address=address,
-    )
-    db.add(place)
-    await db.flush()
-    return {"place_id": str(place.id), "order_index": order_index}
+    tid = _trip_id()
+    lock = await _lock_for(tid)
+    async with lock:
+        async with _SessionMaker() as db:
+            day = await _find_or_create_day(db, tid, int(day_number))
+            max_order = (
+                await db.execute(
+                    select(func.max(Place.order_index)).where(Place.day_id == day.id)
+                )
+            ).scalar()
+            order_index = (max_order + 1) if max_order is not None else 0
+            place = Place(
+                day_id=day.id,
+                order_index=order_index,
+                name=name,
+                description=description,
+                lat=float(lat),
+                lon=float(lon),
+                duration_minutes=duration_minutes,
+                category=category,
+                address=address,
+            )
+            db.add(place)
+            await db.commit()
+            return {"place_id": str(place.id), "order_index": order_index}
 
 
 @tool
@@ -127,7 +142,12 @@ async def remove_place(place_id: str) -> dict:
         pid = uuid.UUID(place_id)
     except ValueError:
         return {"ok": False, "error": "invalid place_id"}
-    await _session().execute(delete(Place).where(Place.id == pid))
+    tid = _trip_id()
+    lock = await _lock_for(tid)
+    async with lock:
+        async with _SessionMaker() as db:
+            await db.execute(delete(Place).where(Place.id == pid))
+            await db.commit()
     return {"ok": True}
 
 
@@ -138,29 +158,49 @@ async def update_place(place_id: str, fields: dict) -> dict:
         pid = uuid.UUID(place_id)
     except ValueError:
         return {"ok": False, "error": "invalid place_id"}
-    db = _session()
-    place = (await db.execute(select(Place).where(Place.id == pid))).scalar_one_or_none()
-    if not place:
-        return {"ok": False, "error": "not found"}
-    for k, v in (fields or {}).items():
-        if hasattr(place, k) and k not in {"id", "day_id", "order_index"}:
-            setattr(place, k, v)
+    tid = _trip_id()
+    lock = await _lock_for(tid)
+    async with lock:
+        async with _SessionMaker() as db:
+            place = (
+                await db.execute(select(Place).where(Place.id == pid))
+            ).scalar_one_or_none()
+            if not place:
+                return {"ok": False, "error": "not found"}
+            for k, v in (fields or {}).items():
+                if hasattr(place, k) and k not in {"id", "day_id", "order_index"}:
+                    setattr(place, k, v)
+            await db.commit()
     return {"ok": True}
 
 
 @tool
 async def set_trip_summary(summary: str) -> dict:
     """Set the trip-level summary paragraph shown on the trip page."""
-    _trip().summary = summary
+    tid = _trip_id()
+    lock = await _lock_for(tid)
+    async with lock:
+        async with _SessionMaker() as db:
+            trip = (
+                await db.execute(select(Trip).where(Trip.id == tid))
+            ).scalar_one_or_none()
+            if not trip:
+                return {"ok": False, "error": "trip not found"}
+            trip.summary = summary
+            await db.commit()
     return {"ok": True}
 
 
 @tool
 async def set_day_title(day_number: int, title: str) -> dict:
-    """Set the title for a specific day (e.g. 'Day 1: Old town')."""
-    db = _session()
-    day = await _find_or_create_day(db, _trip().id, int(day_number))
-    day.title = title
+    """Set the title for a specific day (e.g. 'День 1: Старый город')."""
+    tid = _trip_id()
+    lock = await _lock_for(tid)
+    async with lock:
+        async with _SessionMaker() as db:
+            day = await _find_or_create_day(db, tid, int(day_number))
+            day.title = title
+            await db.commit()
     return {"ok": True}
 
 

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Send, Sparkles } from "lucide-react";
 import VoiceButton from "./VoiceButton";
 import { streamPostSse } from "../lib/sse";
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function ChatPanel({ tripId, onState }: Props) {
+  const qc = useQueryClient();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<LogItem[]>([]);
@@ -70,6 +72,10 @@ export default function ChatPanel({ tripId, onState }: Props) {
       ]);
     } finally {
       setBusy(false);
+      // Belt-and-braces: always force a fresh trip fetch when the stream ends,
+      // in case any state events were dropped or merged while React was
+      // batching updates.
+      qc.invalidateQueries({ queryKey: ["trip", tripId] });
     }
   };
 

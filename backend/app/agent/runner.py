@@ -137,7 +137,7 @@ async def run_agent(
     if not history or not isinstance(history[-1], HumanMessage):
         messages.append(user_msg)
 
-    tokens = set_agent_context(db, trip)
+    tokens = set_agent_context(trip.id)
     try:
         final_state: dict | None = None
         seen_ids: set[str] = set()
@@ -176,11 +176,31 @@ async def run_agent(
                 }
 
             elif kind == "on_tool_end":
+                tool_name = event.get("name")
                 yield {
                     "type": "tool_result",
-                    "name": event.get("name"),
+                    "name": tool_name,
                     "output": _safe_tool_output(data.get("output")),
                 }
+                # For mutating tools, push an incremental state snapshot so
+                # the UI updates live as places are added.
+                if tool_name in {
+                    "add_place",
+                    "remove_place",
+                    "update_place",
+                    "set_trip_summary",
+                    "set_day_title",
+                }:
+                    try:
+                        from app.db.session import SessionLocal
+
+                        async with SessionLocal() as fresh:
+                            yield {
+                                "type": "state",
+                                "trip": await snapshot_trip(fresh, trip.id),
+                            }
+                    except Exception:  # noqa: BLE001
+                        pass
 
             elif kind == "on_chain_end" and event.get("name") in {"LangGraph", "agent"}:
                 final_state = data.get("output") or data.get("outputs")
@@ -201,7 +221,12 @@ async def run_agent(
             db.add(Message(trip_id=trip.id, role=wrapped["role"], content=wrapped))
         await db.commit()
 
-    yield {"type": "state", "trip": await snapshot_trip(db, trip.id)}
+    # Final snapshot uses a fresh session because the shared `db` session
+    # may have a cached view that pre-dates the per-tool commits.
+    from app.db.session import SessionLocal as _Fresh
+
+    async with _Fresh() as fresh:
+        yield {"type": "state", "trip": await snapshot_trip(fresh, trip.id)}
     yield {"type": "done"}
 
 

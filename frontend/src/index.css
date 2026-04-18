@@ -22,6 +22,9 @@ body {
   width: 100%;
   height: 100%;
   background: #f5f5f4;
+  /* Contain Leaflet's internal pane z-indexes (200-700) within its own
+     stacking context so our overlays (z-20/z-30) can render above it. */
+  isolation: isolate;
 }
 
 /* hide leaflet default marker shadow that doesn't exist for div-icons */
