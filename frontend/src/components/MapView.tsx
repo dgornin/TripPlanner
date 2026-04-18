@@ -93,24 +93,32 @@ export default function MapView({ days, accommodation }: Props) {
   }, [JSON.stringify(points)]);
 
   const mapRef = useRef<MapRef | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  // Fit bounds whenever the trip's point set changes OR when the map first
+  // finishes loading its style (refs resolve before effects run, but tiles
+  // aren't ready yet — fitBounds on a still-initialising map silently fails).
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !bounds) return;
+    if (!map || !mapReady || !bounds) return;
     const isSingle =
       bounds[0][0] === bounds[1][0] && bounds[0][1] === bounds[1][1];
     if (isSingle) {
-      map.easeTo({
-        center: bounds[0],
-        zoom: 13,
-        duration: 600,
-      });
+      map.easeTo({ center: bounds[0], zoom: 13, duration: 600 });
     } else {
-      map.fitBounds(bounds, {
-        padding: 60,
-        duration: 600,
-      });
+      map.fitBounds(bounds, { padding: 60, duration: 600 });
     }
-  }, [bounds]);
+  }, [bounds, mapReady]);
+
+  // The map container often resolves its height AFTER MapLibre constructs
+  // its canvas (because of the flex-row parent). Force a resize once we
+  // know both the map and its parent have laid out, otherwise the initial
+  // frame is a blank WebGL context.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.resize();
+  }, [mapReady]);
 
   // One GeoJSON FeatureCollection with one LineString per visible day.
   // Using a single Source/Layer keeps the layer count low regardless of
@@ -148,6 +156,7 @@ export default function MapView({ days, accommodation }: Props) {
       }}
       style={{ width: "100%", height: "100%" }}
       attributionControl={{ compact: true }}
+      onLoad={() => setMapReady(true)}
       onClick={() => setOpenPopupId(null)}
     >
       {routesGeoJson.features.length > 0 && (
